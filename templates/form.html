@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block titulo %}{{ titulo }} - Zoo{% endblock %}
+
+{% block contenido %}
+<div class="encabezado">
+    <h1>{{ titulo }}</h1>
+</div>
+
+<div class="tarjeta formulario">
+    {% if errores %}
+    <ul class="errores">
+        {% for error in errores %}<li>{{ error }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    <form method="post">
+        <div class="campos">
+            <label>Nombre <input name="nombre" value="{{ animal.nombre }}" placeholder="Ej. Simba" required></label>
+            <label>Especie <input name="especie" value="{{ animal.especie }}" placeholder="Ej. León" required></label>
+            <label>Edad <input name="edad" type="number" min="0" value="{{ animal.edad }}" placeholder="Años" required></label>
+            <label>Hábitat <input name="habitat" value="{{ animal.habitat }}" placeholder="Ej. Sabana" required></label>
+        </div>
+        <div class="botones">
+            <a class="boton boton-secundario" href="{{ url_for('index') }}">Cancelar</a>
+            <button class="boton boton-primario" type="submit">Guardar</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

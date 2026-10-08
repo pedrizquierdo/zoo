@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block contenido %}
+<div class="encabezado">
+    <div>
+        <h1>Animales</h1>
+        <p class="subtitulo">{{ animales | length }} registrado{{ "s" if animales | length != 1 }}</p>
+    </div>
+    <a class="boton boton-primario" href="{{ url_for('crear_animal') }}">+ Nuevo animal</a>
+</div>
+
+{% if animales %}
+<div class="tarjeta tabla-contenedor">
+    <table>
+        <thead>
+            <tr><th>ID</th><th>Nombre</th><th>Especie</th><th>Edad</th><th>Hábitat</th><th class="derecha">Acciones</th></tr>
+        </thead>
+        <tbody>
+            {% for animal in animales %}
+            <tr>
+                <td class="apagado">#{{ animal.id }}</td>
+                <td class="fuerte">{{ animal.nombre }}</td>
+                <td>{{ animal.especie }}</td>
+                <td>{{ animal.edad }} año{{ "s" if animal.edad != 1 }}</td>
+                <td>{{ animal.habitat }}</td>
+                <td class="derecha acciones">
+                    <a class="boton boton-secundario boton-chico" href="{{ url_for('editar_animal', id=animal.id) }}">Editar</a>
+                    <form class="inline eliminar" method="post" action="{{ url_for('eliminar_animal', id=animal.id) }}"
+                          data-nombre="{{ animal.nombre }}">
+                        <button class="boton boton-peligro boton-chico" type="submit">Eliminar</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<div class="tarjeta vacio">
+    <p>Todavía no hay animales registrados.</p>
+    <a class="boton boton-primario" href="{{ url_for('crear_animal') }}">Registrar el primero</a>
+</div>
+{% endif %}
+{% endblock %}

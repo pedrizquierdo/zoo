@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="dark">
+    <title>{% block titulo %}Zoo{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+</head>
+<body>
+    <header class="barra">
+        <a class="logo" href="{{ url_for('index') }}">Zoo</a>
+    </header>
+    <main class="contenedor">
+        {% block contenido %}{% endblock %}
+    </main>
+</body>
+</html>
