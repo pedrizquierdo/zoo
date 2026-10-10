@@ -1,3 +1,6 @@
 venv/
 .DS_Store
 *.db
+
+# Local environment values must not be committed.
+.env
