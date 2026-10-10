@@ -1,0 +1,11 @@
+# Keep local credentials out of the image and build context.
+.env
+.env.*
+!.env.example
+.git
+venv
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.vscode
