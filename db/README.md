@@ -1,4 +1,4 @@
-﻿# Esquema de base de datos
+# Esquema de base de datos
 
 Este directorio contiene los scripts de inicialización de MySQL para el proyecto Zoo.
 
@@ -40,3 +40,16 @@ El usuario `zoo_user` se crea automáticamente usando las variables de entorno d
 - `MYSQL_DATABASE`
 
 La imagen oficial de MySQL otorga permisos al usuario sobre la base configurada en `MYSQL_DATABASE`, por lo que no es necesario agregar permisos manuales mientras la aplicación solo use la base `zoo`.
+
+## Relación con `app.py`
+
+Actualmente `app.py` usa una lista de animales en memoria. Cuando se implemente la conexión con MySQL, esa lista deberá reemplazarse por consultas a la tabla `animales`.
+
+Las operaciones esperadas serán:
+
+- `SELECT` para listar animales.
+- `INSERT` para crear animales.
+- `UPDATE` para editar animales.
+- `DELETE` para eliminar animales.
+
+La tabla `animales` ya define el campo `id` como `AUTO_INCREMENT`, por lo que la aplicación no debe generar el identificador manualmente.

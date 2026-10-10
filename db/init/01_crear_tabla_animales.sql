@@ -1,4 +1,7 @@
-﻿CREATE TABLE IF NOT EXISTS animales (
+-- Se usa utf8mb4 para guardar acentos, ñ y caracteres especiales.
+-- La collation utf8mb4_unicode_ci permite comparar texto sin distinguir mayúsculas/minúsculas.
+
+CREATE TABLE IF NOT EXISTS animales (
     id INT NOT NULL AUTO_INCREMENT,
     nombre VARCHAR(100) NOT NULL,
     especie VARCHAR(100) NOT NULL,
