@@ -1,22 +1,67 @@
+import os
+import time
+
 from flask import Flask, abort, redirect, render_template, request, url_for
+from sqlalchemy import Integer, String, create_engine, select
+from sqlalchemy.engine import URL
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 app = Flask(__name__)
 
-# Tabla de animales hardcodeada (vive en memoria: se reinicia al reiniciar la app)
-animales = [
-    {"id": 1, "nombre": "Simba", "especie": "León", "edad": 5, "habitat": "Sabana"},
-    {"id": 2, "nombre": "Dumbo", "especie": "Elefante", "edad": 12, "habitat": "Sabana"},
-    {"id": 3, "nombre": "Kowalski", "especie": "Pingüino", "edad": 3, "habitat": "Polar"},
-    {"id": 4, "nombre": "Baloo", "especie": "Oso", "edad": 8, "habitat": "Bosque"},
-]
-siguiente_id = 5
+INTENTOS_CONEXION = 10
+ESPERA_ENTRE_INTENTOS = 3  # segundos
 
 
-def buscar_animal(id):
-    animal = next((a for a in animales if a["id"] == id), None)
-    if animal is None:
-        abort(404)
-    return animal
+def url_mysql():
+    """Arma la URL de conexión a MySQL a partir de las variables de entorno."""
+    obligatorias = ["DB_USER", "DB_PASSWORD", "DB_NAME"]
+    faltantes = [nombre for nombre in obligatorias if not os.environ.get(nombre)]
+    if faltantes:
+        raise RuntimeError(f"Faltan variables de entorno para conectar a MySQL: {', '.join(faltantes)}")
+
+    return URL.create(
+        "mysql+pymysql",
+        username=os.environ["DB_USER"],
+        password=os.environ["DB_PASSWORD"],
+        host=os.environ.get("DB_HOST", "localhost"),
+        port=int(os.environ.get("DB_PORT", "3306")),
+        database=os.environ["DB_NAME"],
+        query={"charset": "utf8mb4"},
+    )
+
+
+def esperar_mysql(engine):
+    """Reintenta la conexión mientras MySQL arranca."""
+    for intento in range(1, INTENTOS_CONEXION + 1):
+        try:
+            with engine.connect():
+                print("Conectado a MySQL")
+                return
+        except OperationalError as error:
+            print(f"MySQL no responde (intento {intento}/{INTENTOS_CONEXION}): {error.orig}")
+            if intento == INTENTOS_CONEXION:
+                raise
+            time.sleep(ESPERA_ENTRE_INTENTOS)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Animal(Base):
+    __tablename__ = "animales"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nombre: Mapped[str] = mapped_column(String(100))
+    especie: Mapped[str] = mapped_column(String(100))
+    edad: Mapped[int] = mapped_column(Integer)
+    habitat: Mapped[str] = mapped_column(String(100))
+
+
+engine = create_engine(url_mysql(), pool_pre_ping=True)
+esperar_mysql(engine)
+Base.metadata.create_all(engine)
 
 
 def datos_formulario():
@@ -39,18 +84,20 @@ def datos_formulario():
 # Listar
 @app.route("/")
 def index():
+    with Session(engine) as session:
+        animales = session.scalars(select(Animal).order_by(Animal.id)).all()
     return render_template("index.html", animales=animales)
 
 
 # Crear
 @app.route("/animales/nuevo", methods=["GET", "POST"])
 def crear_animal():
-    global siguiente_id
     if request.method == "POST":
         datos, errores = datos_formulario()
         if not errores:
-            animales.append({"id": siguiente_id, **datos})
-            siguiente_id += 1
+            with Session(engine) as session:
+                session.add(Animal(**datos))
+                session.commit()
             return redirect(url_for("index"))
         return render_template("form.html", titulo="Nuevo animal", animal=datos, errores=errores)
     return render_template("form.html", titulo="Nuevo animal", animal={}, errores=[])
@@ -59,20 +106,26 @@ def crear_animal():
 # Actualizar
 @app.route("/animales/<int:id>/editar", methods=["GET", "POST"])
 def editar_animal(id):
-    animal = buscar_animal(id)
-    if request.method == "POST":
-        datos, errores = datos_formulario()
-        if not errores:
-            animal.update(datos)
-            return redirect(url_for("index"))
-        return render_template("form.html", titulo="Editar animal", animal=datos, errores=errores)
-    return render_template("form.html", titulo="Editar animal", animal=animal, errores=[])
+    with Session(engine) as session:
+        animal = session.get(Animal, id) or abort(404)
+        if request.method == "POST":
+            datos, errores = datos_formulario()
+            if not errores:
+                for campo, valor in datos.items():
+                    setattr(animal, campo, valor)
+                session.commit()
+                return redirect(url_for("index"))
+            return render_template("form.html", titulo="Editar animal", animal=datos, errores=errores)
+        return render_template("form.html", titulo="Editar animal", animal=animal, errores=[])
 
 
 # Eliminar
 @app.route("/animales/<int:id>/eliminar", methods=["POST"])
 def eliminar_animal(id):
-    animales.remove(buscar_animal(id))
+    with Session(engine) as session:
+        animal = session.get(Animal, id) or abort(404)
+        session.delete(animal)
+        session.commit()
     return redirect(url_for("index"))
 
 
