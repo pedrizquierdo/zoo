@@ -4,3 +4,8 @@ venv/
 
 # Local environment values must not be committed.
 .env
+
+# Python bytecode and test cache.
+__pycache__/
+*.pyc
+.pytest_cache/

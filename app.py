@@ -2,10 +2,12 @@ import os
 import time
 
 from flask import Flask, abort, redirect, render_template, request, url_for
-from sqlalchemy import Integer, String, create_engine, select
+from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.exc import OperationalError
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
+
+import animales
+from animales import Animal, Base
 
 app = Flask(__name__)
 
@@ -45,20 +47,6 @@ def esperar_mysql(engine):
             time.sleep(ESPERA_ENTRE_INTENTOS)
 
 
-class Base(DeclarativeBase):
-    pass
-
-
-class Animal(Base):
-    __tablename__ = "animales"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    nombre: Mapped[str] = mapped_column(String(100))
-    especie: Mapped[str] = mapped_column(String(100))
-    edad: Mapped[int] = mapped_column(Integer)
-    habitat: Mapped[str] = mapped_column(String(100))
-
-
 engine = create_engine(url_mysql(), pool_pre_ping=True)
 esperar_mysql(engine)
 Base.metadata.create_all(engine)
@@ -84,9 +72,7 @@ def datos_formulario():
 # Listar
 @app.route("/")
 def index():
-    with Session(engine) as session:
-        animales = session.scalars(select(Animal).order_by(Animal.id)).all()
-    return render_template("index.html", animales=animales)
+    return render_template("index.html", animales=animales.listar_animales(engine))
 
 
 # Crear
@@ -95,9 +81,7 @@ def crear_animal():
     if request.method == "POST":
         datos, errores = datos_formulario()
         if not errores:
-            with Session(engine) as session:
-                session.add(Animal(**datos))
-                session.commit()
+            animales.crear_animal(engine, datos)
             return redirect(url_for("index"))
         return render_template("form.html", titulo="Nuevo animal", animal=datos, errores=errores)
     return render_template("form.html", titulo="Nuevo animal", animal={}, errores=[])
@@ -106,26 +90,20 @@ def crear_animal():
 # Actualizar
 @app.route("/animales/<int:id>/editar", methods=["GET", "POST"])
 def editar_animal(id):
-    with Session(engine) as session:
-        animal = session.get(Animal, id) or abort(404)
-        if request.method == "POST":
-            datos, errores = datos_formulario()
-            if not errores:
-                for campo, valor in datos.items():
-                    setattr(animal, campo, valor)
-                session.commit()
-                return redirect(url_for("index"))
-            return render_template("form.html", titulo="Editar animal", animal=datos, errores=errores)
-        return render_template("form.html", titulo="Editar animal", animal=animal, errores=[])
+    animal = animales.obtener_animal(engine, id) or abort(404)
+    if request.method == "POST":
+        datos, errores = datos_formulario()
+        if not errores:
+            animales.actualizar_animal(engine, id, datos) or abort(404)
+            return redirect(url_for("index"))
+        return render_template("form.html", titulo="Editar animal", animal=datos, errores=errores)
+    return render_template("form.html", titulo="Editar animal", animal=animal, errores=[])
 
 
 # Eliminar
 @app.route("/animales/<int:id>/eliminar", methods=["POST"])
 def eliminar_animal(id):
-    with Session(engine) as session:
-        animal = session.get(Animal, id) or abort(404)
-        session.delete(animal)
-        session.commit()
+    animales.eliminar_animal(engine, id) or abort(404)
     return redirect(url_for("index"))
 
 
