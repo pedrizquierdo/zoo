@@ -54,18 +54,20 @@ python -m pip install -r requirements.txt
 Ejecutar desde la raíz del proyecto:
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest -v
 ```
 
 Archivos:
 
-- tests/conftest.py: configura el cliente de Flask y una base de pruebas.
-- tests/test_animales.py: contiene las pruebas del CRUD y sus validaciones.
+- tests/test_validacion.py: prueba la validación del formulario. No necesita base de datos.
+- tests/test_animales.py: prueba las rutas del CRUD contra MySQL.
 
-Cada prueba utiliza una base SQLite en memoria independiente.
-La configuración de pruebas sustituye temporalmente el motor de conexión
-antes de importar app.py. Así se ejecutan las rutas y consultas reales
-sin conectarse a MySQL ni modificar sus datos.
+test_animales.py se conecta a MySQL con las variables DB_* y vacía la tabla
+animales antes de cada prueba. Correrlo solo contra una base de pruebas,
+nunca contra una con datos reales.
+
+En GitHub Actions (.github/workflows/test.yml) las pruebas se ejecutan en
+cada push y pull request, con una base MySQL temporal creada solo para ellas.
 
 Estas pruebas no ejecutan JavaScript ni comprueban características
 específicas de MySQL. La confirmación de eliminación y el funcionamiento

@@ -1,72 +1,12 @@
-import os
-import time
-
 from flask import Flask, abort, redirect, render_template, request, url_for
-from sqlalchemy import create_engine
-from sqlalchemy.engine import URL
-from sqlalchemy.exc import OperationalError
 
 import animales
 from animales import Animal, Base
+from db import engine
 
 app = Flask(__name__)
 
-INTENTOS_CONEXION = 10
-ESPERA_ENTRE_INTENTOS = 3  # segundos
-
-
-def url_mysql():
-    """Arma la URL de conexión a MySQL a partir de las variables de entorno."""
-    obligatorias = ["DB_USER", "DB_PASSWORD", "DB_NAME"]
-    faltantes = [nombre for nombre in obligatorias if not os.environ.get(nombre)]
-    if faltantes:
-        raise RuntimeError(f"Faltan variables de entorno para conectar a MySQL: {', '.join(faltantes)}")
-
-    return URL.create(
-        "mysql+pymysql",
-        username=os.environ["DB_USER"],
-        password=os.environ["DB_PASSWORD"],
-        host=os.environ.get("DB_HOST", "localhost"),
-        port=int(os.environ.get("DB_PORT", "3306")),
-        database=os.environ["DB_NAME"],
-        query={"charset": "utf8mb4"},
-    )
-
-
-def esperar_mysql(engine):
-    """Reintenta la conexión mientras MySQL arranca."""
-    for intento in range(1, INTENTOS_CONEXION + 1):
-        try:
-            with engine.connect():
-                print("Conectado a MySQL")
-                return
-        except OperationalError as error:
-            print(f"MySQL no responde (intento {intento}/{INTENTOS_CONEXION}): {error.orig}")
-            if intento == INTENTOS_CONEXION:
-                raise
-            time.sleep(ESPERA_ENTRE_INTENTOS)
-
-
-engine = create_engine(url_mysql(), pool_pre_ping=True)
-esperar_mysql(engine)
 Base.metadata.create_all(engine)
-
-
-def datos_formulario():
-    """Lee y valida los campos del formulario. Devuelve (datos, errores)."""
-    datos = {
-        "nombre": request.form.get("nombre", "").strip(),
-        "especie": request.form.get("especie", "").strip(),
-        "edad": request.form.get("edad", "").strip(),
-        "habitat": request.form.get("habitat", "").strip(),
-    }
-    errores = [f"El campo {campo} es obligatorio" for campo, valor in datos.items() if not valor]
-    if datos["edad"]:
-        if datos["edad"].isdigit():
-            datos["edad"] = int(datos["edad"])
-        else:
-            errores.append("La edad debe ser un número entero positivo")
-    return datos, errores
 
 
 # Listar
@@ -79,7 +19,7 @@ def index():
 @app.route("/animales/nuevo", methods=["GET", "POST"])
 def crear_animal():
     if request.method == "POST":
-        datos, errores = datos_formulario()
+        datos, errores = animales.validar_animal(request.form)
         if not errores:
             animales.crear_animal(engine, datos)
             return redirect(url_for("index"))
@@ -92,7 +32,7 @@ def crear_animal():
 def editar_animal(id):
     animal = animales.obtener_animal(engine, id) or abort(404)
     if request.method == "POST":
-        datos, errores = datos_formulario()
+        datos, errores = animales.validar_animal(request.form)
         if not errores:
             animales.actualizar_animal(engine, id, datos) or abort(404)
             return redirect(url_for("index"))

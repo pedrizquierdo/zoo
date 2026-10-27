@@ -1,0 +1,43 @@
+name: Pruebas
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # Base MySQL desechable solo para las pruebas
+    services:
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root_test
+          MYSQL_DATABASE: zoo_test
+          MYSQL_USER: zoo_test
+          MYSQL_PASSWORD: zoo_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    # Variables que lee db.py para conectarse
+    env:
+      DB_HOST: 127.0.0.1
+      DB_PORT: "3306"
+      DB_NAME: zoo_test
+      DB_USER: zoo_test
+      DB_PASSWORD: zoo_test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - run: python -m pip install -r requirements.txt
+
+      - run: python -m pytest -v

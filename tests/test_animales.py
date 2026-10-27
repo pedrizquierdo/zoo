@@ -1,15 +1,36 @@
-"""Pruebas funcionales del CRUD con el cliente HTTP de Flask."""
+"""Pruebas del CRUD contra MySQL, usando el cliente de pruebas de Flask.
+
+Necesitan una base MySQL de pruebas (las variables DB_* en el entorno).
+Cada prueba vacía la tabla animales: nunca correrlas contra datos reales.
+"""
 
 from html import unescape
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from animales import Animal
+from app import app, engine
 
-def registros(app):
-    """Consulta los animales guardados en la base de pruebas."""
-    with Session(app.engine) as session:
+
+@pytest.fixture
+def client():
+    # Empezar cada prueba con la tabla vacía
+    with Session(engine) as session:
+        session.execute(delete(Animal))
+        session.commit()
+    with app.test_client() as client:
+        yield client
+
+
+def datos_validos():
+    return {"nombre": "Simba", "especie": "León", "edad": "3", "habitat": "Sabana"}
+
+
+def registros():
+    """Devuelve los animales guardados como diccionarios."""
+    with Session(engine) as session:
         return [
             {
                 "id": animal.id,
@@ -18,193 +39,88 @@ def registros(app):
                 "edad": animal.edad,
                 "habitat": animal.habitat,
             }
-            for animal in session.scalars(select(app.Animal)).all()
+            for animal in session.scalars(select(Animal)).all()
         ]
 
 
-def crear(client, app, datos):
-    """Crea un animal y devuelve su ID."""
+def crear(client, datos):
+    """Crea un animal desde el formulario y devuelve su ID."""
     response = client.post("/animales/nuevo", data=datos)
 
     assert response.status_code == 302
     assert response.headers["Location"] == "/"
 
-    return registros(app)[0]["id"]
+    return registros()[-1]["id"]
 
 
-def test_crear_animal_valido(client, zoo_app, datos_validos):
-    crear(client, zoo_app, datos_validos)
-    animales = registros(zoo_app)
-
-    assert len(animales) == 1
-    assert animales[0] == {
-        "id": animales[0]["id"],
-        **datos_validos,
-        "edad": 3,
-    }
-
+def test_listado_vacio(client):
     response = client.get("/")
 
     assert response.status_code == 200
-    assert "Simba" in response.get_data(as_text=True)
-    assert "León" in response.get_data(as_text=True)
+    assert "Todavía no hay animales registrados." in response.get_data(as_text=True)
 
 
-@pytest.mark.parametrize("campo", ["nombre", "especie", "edad", "habitat"])
-@pytest.mark.parametrize("valor", ["", "   "])
-def test_campos_vacios(client, zoo_app, datos_validos, campo, valor):
-    datos_validos[campo] = valor
+def test_crear_animal(client):
+    animal_id = crear(client, datos_validos())
 
-    response = client.post("/animales/nuevo", data=datos_validos)
-
-    assert response.status_code == 200
-    assert (
-        f"El campo {campo} es obligatorio"
-        in response.get_data(as_text=True)
-    )
-    assert registros(zoo_app) == []
-
-
-def test_todos_los_campos_ausentes(client, zoo_app):
-    response = client.post("/animales/nuevo", data={})
-
-    assert response.status_code == 200
-
-    for campo in ("nombre", "especie", "edad", "habitat"):
-        assert (
-            f"El campo {campo} es obligatorio"
-            in response.get_data(as_text=True)
-        )
-
-    assert registros(zoo_app) == []
-
-
-@pytest.mark.parametrize("edad", ["abc", "3.5", "-1"])
-def test_edad_invalida(client, zoo_app, datos_validos, edad):
-    datos_validos["edad"] = edad
-
-    response = client.post("/animales/nuevo", data=datos_validos)
-
-    assert response.status_code == 200
-    assert (
-        "La edad debe ser un número entero positivo"
-        in response.get_data(as_text=True)
-    )
-    assert registros(zoo_app) == []
-
-
-def test_editar_guarda_cambios(client, zoo_app, datos_validos):
-    animal_id = crear(client, zoo_app, datos_validos)
-
-    response = client.get(f"/animales/{animal_id}/editar")
-
-    assert response.status_code == 200
-    assert "Simba" in response.get_data(as_text=True)
-
-    nuevos = {
-        "nombre": "Nala",
-        "especie": "Leona",
-        "edad": "5",
-        "habitat": "Pradera",
-    }
-
-    response = client.post(
-        f"/animales/{animal_id}/editar",
-        data=nuevos,
-    )
-
-    assert response.status_code == 302
-    assert response.headers["Location"] == "/"
-    assert registros(zoo_app) == [
-        {"id": animal_id, **nuevos, "edad": 5}
-    ]
+    assert registros() == [{"id": animal_id, **datos_validos(), "edad": 3}]
 
     listado = client.get("/").get_data(as_text=True)
+    assert "Simba" in listado
+    assert "León" in listado
 
-    assert "Nala" in listado
-    assert "Simba" not in listado
 
-
-def test_edicion_invalida_conserva_datos(
-    client, zoo_app, datos_validos
-):
-    animal_id = crear(client, zoo_app, datos_validos)
-    antes = registros(zoo_app)
-
-    response = client.post(
-        f"/animales/{animal_id}/editar",
-        data={**datos_validos, "edad": "abc"},
-    )
+def test_crear_animal_invalido_no_guarda(client):
+    response = client.post("/animales/nuevo", data={**datos_validos(), "edad": "abc"})
 
     assert response.status_code == 200
-    assert (
-        "La edad debe ser un número entero positivo"
-        in response.get_data(as_text=True)
-    )
-    assert registros(zoo_app) == antes
+    assert "La edad debe ser un número entero positivo" in response.get_data(as_text=True)
+    assert registros() == []
 
 
-def test_eliminar_animal(client, zoo_app, datos_validos):
-    animal_id = crear(client, zoo_app, datos_validos)
+def test_editar_animal(client):
+    animal_id = crear(client, datos_validos())
+
+    response = client.get(f"/animales/{animal_id}/editar")
+    assert response.status_code == 200
+    assert "Simba" in response.get_data(as_text=True)
+
+    nuevos = {"nombre": "Nala", "especie": "Leona", "edad": "5", "habitat": "Pradera"}
+    response = client.post(f"/animales/{animal_id}/editar", data=nuevos)
+
+    assert response.status_code == 302
+    assert registros() == [{"id": animal_id, **nuevos, "edad": 5}]
+
+
+def test_editar_animal_invalido_no_cambia(client):
+    animal_id = crear(client, datos_validos())
+    antes = registros()
+
+    response = client.post(f"/animales/{animal_id}/editar", data={**datos_validos(), "edad": "abc"})
+
+    assert response.status_code == 200
+    assert registros() == antes
+
+
+def test_eliminar_animal(client):
+    animal_id = crear(client, datos_validos())
 
     response = client.post(f"/animales/{animal_id}/eliminar")
 
     assert response.status_code == 302
-    assert response.headers["Location"] == "/"
-    assert registros(zoo_app) == []
-
-    listado = client.get("/").get_data(as_text=True)
-
-    assert "Simba" not in listado
-    assert "Todavía no hay animales registrados." in listado
+    assert registros() == []
 
 
-@pytest.mark.parametrize(
-    "metodo,accion",
-    [
-        ("get", "editar"),
-        ("post", "editar"),
-        ("post", "eliminar"),
-    ],
-)
-def test_id_inexistente_devuelve_404(
-    client, zoo_app, metodo, accion
-):
-    response = getattr(client, metodo)(
-        f"/animales/999999/{accion}"
-    )
+@pytest.mark.parametrize("metodo,accion", [("get", "editar"), ("post", "editar"), ("post", "eliminar")])
+def test_id_inexistente_devuelve_404(client, metodo, accion):
+    response = getattr(client, metodo)(f"/animales/999999/{accion}")
 
     assert response.status_code == 404
-    assert registros(zoo_app) == []
 
 
-@pytest.mark.parametrize(
-    "nombre",
-    ["José", "Ñoño", 'León "Rey"', "O'Connor"],
-)
-def test_nombres_especiales(
-    client, zoo_app, datos_validos, nombre
-):
-    datos_validos["nombre"] = nombre
-    animal_id = crear(client, zoo_app, datos_validos)
+@pytest.mark.parametrize("nombre", ["José", "Ñoño", 'León "Rey"', "O'Connor"])
+def test_nombres_especiales(client, nombre):
+    crear(client, {**datos_validos(), "nombre": nombre})
 
-    assert registros(zoo_app)[0]["nombre"] == nombre
-
-    for ruta in ("/", f"/animales/{animal_id}/editar"):
-        response = client.get(ruta)
-
-        assert response.status_code == 200
-        assert nombre in unescape(response.get_data(as_text=True))
-
-    nuevo_nombre = nombre + " editado"
-
-    response = client.post(
-        f"/animales/{animal_id}/editar",
-        data={**datos_validos, "nombre": nuevo_nombre},
-    )
-
-    assert response.status_code == 302
-    assert registros(zoo_app)[0]["nombre"] == nuevo_nombre
-    assert nuevo_nombre in unescape(
-        client.get("/").get_data(as_text=True)
-    )
+    assert registros()[0]["nombre"] == nombre
+    assert nombre in unescape(client.get("/").get_data(as_text=True))

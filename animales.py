@@ -16,6 +16,23 @@ class Animal(Base):
     habitat: Mapped[str] = mapped_column(String(100))
 
 
+def validar_animal(form):
+    """Lee y valida los campos de un formulario. Devuelve (datos, errores)."""
+    datos = {
+        "nombre": form.get("nombre", "").strip(),
+        "especie": form.get("especie", "").strip(),
+        "edad": form.get("edad", "").strip(),
+        "habitat": form.get("habitat", "").strip(),
+    }
+    errores = [f"El campo {campo} es obligatorio" for campo, valor in datos.items() if not valor]
+    if datos["edad"]:
+        if datos["edad"].isdigit():
+            datos["edad"] = int(datos["edad"])
+        else:
+            errores.append("La edad debe ser un número entero positivo")
+    return datos, errores
+
+
 def listar_animales(engine):
     """Devuelve todos los animales ordenados por ID."""
     with Session(engine) as session:
